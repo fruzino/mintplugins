@@ -1,0 +1,12 @@
+script      = plugins/extract/Plugin.py
+namespace   = extract
+description = Extract structured data from chat text using custom regex patterns
+author      = Fruzio
+version     = 2.0.0
+dep         = tabulate
+cmd         = text
+cmd         = field
+cmd         = run
+cmd         = save
+cmd         = clear
+cmd         = fields
