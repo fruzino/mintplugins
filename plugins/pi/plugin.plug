@@ -1,0 +1,8 @@
+script = plugins/pi/plugin.py
+namespace = pi
+description = Pi math utilities — pi.value, pi.rad, pi.area etc.
+author      = Fruzio
+version     = 1.0.0
+cmd    = rad
+cmd    = pi
+cmd    = estpi

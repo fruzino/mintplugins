@@ -1,0 +1,13 @@
+script = plugins/strtools/plugin.py
+namespace = strtools
+description = String utilities to control behaviour of strings.
+author      = Fruzio
+version     = 1.0.0
+cmd    = upper
+cmd    = lower
+cmd    = reverse
+cmd    = length
+cmd    = replace
+cmd    = trim
+cmd    = contains
+cmd    = repeat_str
