@@ -2,7 +2,7 @@
 Plugin.py  -  cip plugin for Mint Shell
 ==========================================
 Auto-discovering Mint Package Installer.
-No index.json needed — scans the GitHub repo automatically.
+No index.json needed - scans the GitHub repo automatically.
 
 Usage in Mint:
     cip.install(pi)
@@ -16,6 +16,12 @@ Usage in Mint:
 import sys
 import os
 import json
+
+# Force UTF-8 output on Windows to avoid codec errors
+if sys.platform == "win32":
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 import shutil
 import urllib.request
 import urllib.error
@@ -27,11 +33,11 @@ GITHUB_USER   = "fruzino"
 GITHUB_REPO   = "mintplugins"
 GITHUB_BRANCH = "main"
 
-# GitHub API — lists all folders in /plugins/ automatically
+# GitHub API - lists all folders in /plugins/ automatically
 API_URL  = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/contents/plugins"
 RAW_BASE = f"https://raw.githubusercontent.com/{GITHUB_USER}/{GITHUB_REPO}/{GITHUB_BRANCH}/plugins"
 
-# Resolve plugins/ dir relative to this script (plugins/cip/ → plugins/)
+# Resolve plugins/ dir relative to this script (plugins/cip/ -> plugins/)
 SCRIPT_DIR  = os.path.dirname(os.path.abspath(__file__))
 PLUGINS_DIR = os.path.dirname(SCRIPT_DIR)
 
@@ -66,7 +72,7 @@ def get_all_plugins():
     """
     Hits the GitHub API to list all folders inside /plugins/.
     Returns a dict: { "pi": { name, url, raw_base }, ... }
-    No index.json needed — it's all auto-discovered.
+    No index.json needed - it's all auto-discovered.
     """
     entries = fetch_json(API_URL)
     plugins = {}
@@ -142,7 +148,7 @@ def cmd_install(args):
     meta   = get_plugin_meta(plugin)
     files  = get_plugin_files(plugin)
 
-    print(f"{T}Installing {B}{name}{X}{T} — {meta['description']}{X}")
+    print(f"{T}Installing {B}{name}{X}{T} - {meta['description']}{X}")
 
     dest = plugin_path(name)
     os.makedirs(dest, exist_ok=True)
@@ -150,12 +156,12 @@ def cmd_install(args):
     for fname in files:
         content = fetch_text(f"{plugin['raw_base']}/{fname}")
         if content is None:
-            print(f"{R}  Failed to download {fname} — aborting.{X}")
+            print(f"{R}  Failed to download {fname} - aborting.{X}")
             shutil.rmtree(dest, ignore_errors=True)
             sys.exit(1)
         with open(os.path.join(dest, fname), "w", encoding="utf-8") as f:
             f.write(content)
-        print(f"  {G}✓{X} {fname}")
+        print(f"  {G}OK{X} {fname}")
 
     for dep in meta.get("dependencies", []):
         print(f"  pip install {dep} ...", end=" ", flush=True)
@@ -163,7 +169,7 @@ def cmd_install(args):
             [sys.executable, "-m", "pip", "install", dep, "--quiet"],
             capture_output=True
         )
-        print(f"{G}✓{X}" if r.returncode == 0 else f"{R}failed{X}")
+        print(f"{G}OK{X}" if r.returncode == 0 else f"{R}failed{X}")
 
     print(f"\n{G}{B}'{name}' installed!{X} Restart Mint to use it.")
     print(f"  Namespace: {T}{meta['namespace']}{X}")
@@ -223,7 +229,7 @@ def cmd_search(args):
         plugin = data if isinstance(data, dict) and "api_url" in data else data[0]
         meta   = get_plugin_meta(plugin)
         inst   = f"{G}[installed]{X}" if is_installed(name) else ""
-        print(f"  {B}{name}{X} — {meta.get('description','')} {inst}")
+        print(f"  {B}{name}{X} - {meta.get('description','')} {inst}")
 
 
 def cmd_info(args):
