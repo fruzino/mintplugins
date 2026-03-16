@@ -21,9 +21,10 @@ import urllib.request
 import urllib.error
 import subprocess
 
+# ── Config ────────────────────────────────────────────────────────────────────
 
 GITHUB_USER   = "fruzino"
-GITHUB_REPO   = "mint-plugins"
+GITHUB_REPO   = "mintplugins"
 GITHUB_BRANCH = "main"
 
 # GitHub API — lists all folders in /plugins/ automatically
@@ -38,6 +39,7 @@ PLUGINS_DIR = os.path.dirname(SCRIPT_DIR)
 G = "\033[92m"; R = "\033[91m"; Y = "\033[93m"
 T = "\033[96m"; B = "\033[1m";  X = "\033[0m"
 
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def fetch_json(url):
     try:
@@ -118,6 +120,8 @@ def plugin_path(name):
 
 def is_installed(name):
     return os.path.isdir(plugin_path(name))
+
+# ── Commands ──────────────────────────────────────────────────────────────────
 
 def cmd_install(args):
     if not args:
@@ -242,6 +246,8 @@ def cmd_info(args):
     print(f"  Repo:        https://github.com/{GITHUB_USER}/{GITHUB_REPO}/tree/main/plugins/{name}")
     print()
 
+
+# ── Dispatch ──────────────────────────────────────────────────────────────────
 
 DISPATCH = {
     "install":   cmd_install,
