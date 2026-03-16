@@ -1,8 +1,8 @@
-script      = plugins/pi/plugin.py
-namespace   = pi
+script      = plugins/cip/plugin.py
+namespace   = cip
 description = CIP (Cintrus Install Plugin) utilities to access plugins.
 author      = Fruzio
-version     = 1.0.0
+version     = 1.0.2
 cmd         = install
 cmd         = remove
 cmd         = uninstall
