@@ -1,0 +1,11 @@
+script      = plugins/rand/Plugin.py
+namespace   = rand
+description = Random numbers and choices - rand.int, rand.choice, rand.shuffle etc.
+author      = Fruzio
+version     = 1.0.0
+cmd         = int
+cmd         = float
+cmd         = choice
+cmd         = shuffle
+cmd         = chance
+cmd         = uuid
