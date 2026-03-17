@@ -39,222 +39,268 @@ from tkinter import ttk, messagebox, simpledialog, filedialog as tkfiledialog
 
 # ── globals ──────────────────────────────────────────────────────────────────
 
+_STATE_FILE = os.path.join(os.path.dirname(__file__), "gui_state.json")
+
+def _save_cmd(name, args):
+    import json
+    state = []
+    if name != "window" and os.path.exists(_STATE_FILE):
+        try:
+            with open(_STATE_FILE, "r", encoding="utf-8") as f:
+                state = json.load(f)
+        except:
+            state = []
+    
+    if name == "window":
+        state = [] # Reset on new window
+    
+    state.append({"cmd": name, "args": args})
+    
+    with open(_STATE_FILE, "w", encoding="utf-8") as f:
+        json.dump(state, f, indent=2)
+
+def _load_state():
+    import json
+    if not os.path.exists(_STATE_FILE):
+        return []
+    try:
+        with open(_STATE_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return []
+
+# ── internal build ──────────────────────────────────────────────────────────
+
 _root = None
 _frame = None
 _widgets = {}
-_widget_counter = 0
 
-def _ensure_root(title="Mint GUI", geometry="400x300"):
-    """Create the root window if it doesn't exist yet."""
+def _apply_style(root):
+    style = ttk.Style(root)
+    style.theme_use("clam")
+    
+    # Catppuccin Mocha Colors
+    bg = "#1e1e2e"
+    fg = "#cdd6f4"
+    accent = "#89b4fa"
+    surface = "#313244"
+    
+    root.configure(bg=bg)
+    
+    style.configure("TFrame", background=bg)
+    style.configure("TLabel", background=bg, foreground=fg, font=("Segoe UI", 11))
+    style.configure("TButton", 
+                    background=accent, 
+                    foreground="#11111b", 
+                    font=("Segoe UI", 10, "bold"),
+                    borderwidth=0,
+                    focusthickness=3,
+                    focuscolor=accent)
+    style.map("TButton",
+              background=[("active", "#b4befe"), ("pressed", "#74c7ec")])
+    
+    style.configure("TEntry", fieldbackground=surface, foreground=fg, insertcolor=fg, borderwidth=0)
+    style.configure("TCombobox", fieldbackground=surface, foreground=fg, arrowcolor=accent)
+    style.configure("Horizontal.TScale", background=bg, troughcolor=surface)
+
+def _build_ui(state):
     global _root, _frame
-    if _root is None:
-        _root = tk.Tk()
-        _root.title(title)
-        _root.geometry(geometry)
-        _root.configure(bg="#1e1e2e")
-        # Style
-        style = ttk.Style(_root)
-        style.theme_use("clam")
-        style.configure("TButton",   padding=6, font=("Segoe UI", 10))
-        style.configure("TLabel",    font=("Segoe UI", 10), background="#1e1e2e", foreground="#cdd6f4")
-        style.configure("TEntry",    font=("Segoe UI", 10))
-        style.configure("TCheckbutton", font=("Segoe UI", 10), background="#1e1e2e", foreground="#cdd6f4")
-        style.configure("TRadiobutton", font=("Segoe UI", 10), background="#1e1e2e", foreground="#cdd6f4")
+    _root = tk.Tk()
+    _apply_style(_root)
+    
+    # Default title/size if window() wasn't called first
+    title = "Mint GUI"
+    geom = "400x500"
+    
+    # First pass: find window config
+    for item in state:
+        if item["cmd"] == "window":
+            title = item["args"][0] if item["args"] else title
+            geom = item["args"][1] if len(item["args"]) > 1 else geom
+            break
+            
+    _root.title(title)
+    _root.geometry(geom)
+    
+    _frame = ttk.Frame(_root, padding=20)
+    _frame.pack(fill="both", expand=True)
+    
+    # Second pass: build widgets
+    for item in state:
+        cmd = item["cmd"]
+        args = item["args"]
+        
+        if cmd == "button":
+            text = args[0] if args else "Button"
+            mcmd = args[1] if len(args) > 1 else ""
+            def make_handler(c): return lambda: os.system(f'mint -e "{c}"') if c else None
+            btn = ttk.Button(_frame, text=text, command=make_handler(mcmd))
+            btn.pack(pady=8, fill="x")
+            
+        elif cmd == "label":
+            text = " ".join(args)
+            ttk.Label(_frame, text=text).pack(pady=5, anchor="w")
+            
+        elif cmd == "image":
+            path = args[0] if args else ""
+            if path and os.path.exists(path):
+                try:
+                    img = tk.PhotoImage(file=path)
+                    lbl = ttk.Label(_frame, image=img)
+                    lbl.image = img
+                    lbl.pack(pady=10)
+                except: pass
+        
+        elif cmd == "text":
+            content = " ".join(args)
+            txt = tk.Text(_frame, height=6, font=("Segoe UI", 10), bg=surface, fg=fg,
+                          insertbackground=fg, relief="flat", padx=10, pady=10)
+            if content: txt.insert("1.0", content)
+            txt.pack(pady=8, fill="both", expand=True)
+            
+        elif cmd == "checkbox":
+            label = args[0] if args else "Option"
+            var = tk.BooleanVar()
+            ttk.Checkbutton(_frame, text=label, variable=var).pack(pady=4, anchor="w")
+            
+        elif cmd == "radio":
+            label = args[0] if args else "Option"
+            group = args[1] if len(args) > 1 else "default"
+            if f"_radio_{group}" not in _widgets: _widgets[f"_radio_{group}"] = tk.StringVar(value="")
+            var = _widgets[f"_radio_{group}"]
+            ttk.Radiobutton(_frame, text=label, variable=var, value=label).pack(pady=4, anchor="w")
+            
+        elif cmd == "dropdown":
+            values = args if args else ["Option 1", "Option 2"]
+            combo = ttk.Combobox(_frame, values=values, state="readonly")
+            combo.current(0)
+            combo.pack(pady=8, fill="x")
+            
+        elif cmd == "slider":
+            lo = float(args[0]) if args else 0
+            hi = float(args[1]) if len(args) > 1 else 100
+            ttk.Scale(_frame, from_=lo, to=hi, orient="horizontal").pack(pady=8, fill="x")
 
-        _frame = ttk.Frame(_root, padding=12)
-        _frame.pack(fill="both", expand=True)
+        elif cmd == "alert":
+            msg = " ".join(args)
+            messagebox.showinfo("Mint", msg)
+            
+        elif cmd == "confirm":
+            msg = " ".join(args)
+            res = messagebox.askyesno("Mint", msg)
+            print("true" if res else "false")
+            
+        elif cmd == "prompt":
+            msg = " ".join(args)
+            res = simpledialog.askstring("Mint", msg)
+            if res: print(res)
+            
+        elif cmd == "filedialog":
+            path = tkfiledialog.askopenfilename()
+            if path: print(path)
+            
+        elif cmd == "close":
+            _root.destroy()
 
-def _next_id():
-    global _widget_counter
-    _widget_counter += 1
-    return f"w{_widget_counter}"
+
+
 
 # ── commands ─────────────────────────────────────────────────────────────────
 
 def cmd_window(args):
     """gui.window(title, widthxheight)"""
-    title = args[0].strip() if args else "Mint GUI"
-    geom  = args[1].strip() if len(args) > 1 else "400x300"
-    _ensure_root(title, geom)
-    wid = _next_id()
-    print(wid)
+    _save_cmd("window", args)
+    print("ok")
 
 def cmd_button(args):
     """gui.button(text, mintcmd)"""
-    _ensure_root()
-    text = args[0].strip() if args else "Button"
-    mint_cmd = args[1].strip() if len(args) > 1 else ""
-
-    def on_click():
-        if mint_cmd:
-            os.system(f'mint -e "{mint_cmd}"')
-
-    btn = ttk.Button(_frame, text=text, command=on_click)
-    btn.pack(pady=4, fill="x")
-    wid = _next_id()
-    _widgets[wid] = btn
-    print(wid)
+    _save_cmd("button", args)
+    print("ok")
 
 def cmd_label(args):
     """gui.label(text)"""
-    _ensure_root()
-    text = " ".join(a.strip() for a in args) if args else ""
-    lbl = ttk.Label(_frame, text=text)
-    lbl.pack(pady=4, anchor="w")
-    wid = _next_id()
-    _widgets[wid] = lbl
-    print(wid)
-
-def cmd_input(args):
-    """gui.input(placeholder)"""
-    _ensure_root()
-    placeholder = args[0].strip() if args else ""
-    entry = ttk.Entry(_frame)
-    if placeholder:
-        entry.insert(0, placeholder)
-        entry.config(foreground="grey")
-        def on_focus_in(e):
-            if entry.get() == placeholder:
-                entry.delete(0, "end")
-                entry.config(foreground="black")
-        def on_focus_out(e):
-            if not entry.get():
-                entry.insert(0, placeholder)
-                entry.config(foreground="grey")
-        entry.bind("<FocusIn>", on_focus_in)
-        entry.bind("<FocusOut>", on_focus_out)
-    entry.pack(pady=4, fill="x")
-    wid = _next_id()
-    _widgets[wid] = entry
-    print(wid)
-
-def cmd_text(args):
-    """gui.text(content)"""
-    _ensure_root()
-    content = " ".join(a.strip() for a in args) if args else ""
-    txt = tk.Text(_frame, height=6, font=("Consolas", 10), bg="#313244", fg="#cdd6f4",
-                  insertbackground="#cdd6f4", relief="flat")
-    if content:
-        txt.insert("1.0", content)
-    txt.pack(pady=4, fill="both", expand=True)
-    wid = _next_id()
-    _widgets[wid] = txt
-    print(wid)
-
-def cmd_checkbox(args):
-    """gui.checkbox(label)"""
-    _ensure_root()
-    label = args[0].strip() if args else "Option"
-    var = tk.BooleanVar()
-    cb = ttk.Checkbutton(_frame, text=label, variable=var)
-    cb.pack(pady=2, anchor="w")
-    wid = _next_id()
-    _widgets[wid] = (cb, var)
-    print(wid)
-
-def cmd_radio(args):
-    """gui.radio(label, group)"""
-    _ensure_root()
-    label = args[0].strip() if args else "Option"
-    group = args[1].strip() if len(args) > 1 else "default"
-    # share a StringVar per group
-    if f"_radio_{group}" not in _widgets:
-        _widgets[f"_radio_{group}"] = tk.StringVar(value="")
-    var = _widgets[f"_radio_{group}"]
-    rb = ttk.Radiobutton(_frame, text=label, variable=var, value=label)
-    rb.pack(pady=2, anchor="w")
-    wid = _next_id()
-    _widgets[wid] = (rb, var)
-    print(wid)
-
-def cmd_dropdown(args):
-    """gui.dropdown(opt1, opt2, ...)"""
-    _ensure_root()
-    values = [a.strip() for a in args] if args else ["Option 1", "Option 2"]
-    combo = ttk.Combobox(_frame, values=values, state="readonly")
-    combo.current(0)
-    combo.pack(pady=4, fill="x")
-    wid = _next_id()
-    _widgets[wid] = combo
-    print(wid)
-
-def cmd_slider(args):
-    """gui.slider(min, max)"""
-    _ensure_root()
-    lo = float(args[0].strip()) if args else 0
-    hi = float(args[1].strip()) if len(args) > 1 else 100
-    scale = ttk.Scale(_frame, from_=lo, to=hi, orient="horizontal")
-    scale.pack(pady=4, fill="x")
-    wid = _next_id()
-    _widgets[wid] = scale
-    print(wid)
+    _save_cmd("label", args)
+    print("ok")
 
 def cmd_image(args):
     """gui.image(path)"""
-    _ensure_root()
-    path = args[0].strip() if args else ""
-    if not path or not os.path.isfile(path):
-        print(f"ERROR: image file not found: {path}", file=sys.stderr)
-        sys.exit(1)
-    try:
-        img = tk.PhotoImage(file=path)
-        lbl = ttk.Label(_frame, image=img)
-        lbl.image = img  # prevent GC
-        lbl.pack(pady=4)
-        wid = _next_id()
-        _widgets[wid] = lbl
-        print(wid)
-    except Exception as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        sys.exit(1)
+    _save_cmd("image", args)
+    print("ok")
 
-def cmd_color(args):
-    """gui.color(bg)"""
-    _ensure_root()
-    bg = args[0].strip() if args else "#1e1e2e"
-    _root.configure(bg=bg)
+def cmd_input(args):
+    """gui.input()"""
+    _save_cmd("input", args)
+    print("ok")
+
+def cmd_text(args):
+    """gui.text(content)"""
+    _save_cmd("text", args)
+    print("ok")
+
+def cmd_checkbox(args):
+    """gui.checkbox(label)"""
+    _save_cmd("checkbox", args)
+    print("ok")
+
+def cmd_radio(args):
+    """gui.radio(label, group)"""
+    _save_cmd("radio", args)
+    print("ok")
+
+def cmd_dropdown(args):
+    """gui.dropdown(opt1, opt2, ...)"""
+    _save_cmd("dropdown", args)
+    print("ok")
+
+def cmd_slider(args):
+    """gui.slider(min, max)"""
+    _save_cmd("slider", args)
     print("ok")
 
 def cmd_alert(args):
     """gui.alert(message)"""
-    _ensure_root()
-    msg = " ".join(a.strip() for a in args) if args else "Alert"
-    messagebox.showinfo("Mint", msg)
+    _save_cmd("alert", args)
     print("ok")
 
 def cmd_confirm(args):
     """gui.confirm(message)"""
-    _ensure_root()
-    msg = " ".join(a.strip() for a in args) if args else "Are you sure?"
-    result = messagebox.askyesno("Mint", msg)
-    print("true" if result else "false")
+    _save_cmd("confirm", args)
+    print("ok")
 
 def cmd_prompt(args):
     """gui.prompt(message)"""
-    _ensure_root()
-    msg = " ".join(a.strip() for a in args) if args else "Enter value:"
-    result = simpledialog.askstring("Mint", msg)
-    print(result if result else "")
+    _save_cmd("prompt", args)
+    print("ok")
 
 def cmd_filedialog(args):
     """gui.filedialog()"""
-    _ensure_root()
-    path = tkfiledialog.askopenfilename()
-    print(path if path else "")
+    _save_cmd("filedialog", args)
+    print("ok")
 
 def cmd_close(args):
     """gui.close()"""
-    global _root
-    if _root:
-        _root.destroy()
-        _root = None
+    _save_cmd("close", args)
     print("ok")
+
+def cmd_color(args):
+    """gui.color(bg)"""
+    _save_cmd("color", args)
+    print("ok")
+
 
 def cmd_show(args):
     """gui.show()  — run the tkinter main loop."""
-    _ensure_root()
+    state = _load_state()
+    if not state:
+        print("ERROR: No window or widgets defined", file=sys.stderr)
+        return
+    _build_ui(state)
     _root.mainloop()
+    # Clean up state after show
+    if os.path.exists(_STATE_FILE):
+        os.remove(_STATE_FILE)
     print("ok")
+
 
 # ── dispatch ─────────────────────────────────────────────────────────────────
 

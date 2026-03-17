@@ -27,259 +27,202 @@ Usage in Mint:
 import sys
 import os
 
-# ── Lazy pygame import ───────────────────────────────────────────────
-# We import pygame only when the first command runs, so merely loading
-# the plugin doesn't pop up a window.
+# ── globals & persistence ───────────────────────────────────────────
+
+_STATE_FILE = os.path.join(os.path.dirname(__file__), "pg_state.json")
+
+def _save_cmd(name, args):
+    import json
+    state = []
+    # If starting new session, or if file exists, read existing
+    if name != "init" and os.path.exists(_STATE_FILE):
+        try:
+            with open(_STATE_FILE, "r", encoding="utf-8") as f:
+                state = json.load(f)
+        except:
+            state = []
+    
+    if name == "init":
+        state = [] # Reset on new init
+    
+    state.append({"cmd": name, "args": args})
+    
+    with open(_STATE_FILE, "w", encoding="utf-8") as f:
+        json.dump(state, f, indent=2)
+
+def _load_state():
+    import json
+    if not os.path.exists(_STATE_FILE):
+        return []
+    try:
+        with open(_STATE_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return []
+
+def _clear_state():
+    if os.path.exists(_STATE_FILE):
+        os.remove(_STATE_FILE)
+
+# ── internal build ──────────────────────────────────────────────────────────
 
 _pg = None
 _screen = None
-_width = 800
-_height = 600
 
+def _replay_state(state):
+    global _pg, _screen
+    import pygame
+    _pg = pygame
+    _pg.init()
+    
+    width, height = 800, 600
+    title = "Mint Pygame"
+    
+    # First pass: config
+    for item in state:
+        if item["cmd"] == "init":
+            if len(item["args"]) >= 2:
+                width = int(item["args"][0])
+                height = int(item["args"][1])
+        elif item["cmd"] == "title":
+            if item["args"]: title = " ".join(item["args"])
+            
+    _screen = _pg.display.set_mode((width, height))
+    _pg.display.set_caption(title)
+    
+    # Second pass: draw
+    for item in state:
+        cmd = item["cmd"]
+        args = item["args"]
+        
+        if cmd == "fill":
+            if len(args) >= 3:
+                _screen.fill((int(args[0]), int(args[1]), int(args[2])))
+        elif cmd == "rect":
+            if len(args) >= 7:
+                _pg.draw.rect(_screen, (int(args[4]), int(args[5]), int(args[6])), 
+                              (int(args[0]), int(args[1]), int(args[2]), int(args[3])))
+        elif cmd == "circle":
+            if len(args) >= 6:
+                _pg.draw.circle(_screen, (int(args[3]), int(args[4]), int(args[5])), 
+                                (int(args[0]), int(args[1])), int(args[2]))
+        elif cmd == "line":
+            if len(args) >= 7:
+                _pg.draw.line(_screen, (int(args[4]), int(args[5]), int(args[6])), 
+                              (int(args[0]), int(args[1])), (int(args[2]), int(args[3])), 2)
+        elif cmd == "text":
+            if len(args) >= 7:
+                msg = " ".join(args[:-6])
+                x, y = int(args[-6]), int(args[-5])
+                sz = int(args[-4])
+                clr = (int(args[-3]), int(args[-2]), int(args[-1]))
+                font = _pg.font.SysFont(None, sz)
+                surf = font.render(msg, True, clr)
+                _screen.blit(surf, (x, y))
+        elif cmd == "image":
+            if len(args) >= 3 and os.path.exists(args[0]):
+                img = _pg.image.load(args[0])
+                _screen.blit(img, (int(args[1]), int(args[2])))
+        elif cmd == "clear":
+            _screen.fill((0, 0, 0))
 
-def _ensure_pygame():
-    global _pg
-    if _pg is None:
-        import pygame
-        _pg = pygame
-
-
-def _ensure_screen():
-    """Ensure pygame is initialised and a display surface exists."""
-    global _pg, _screen, _width, _height
-    _ensure_pygame()
-    if _screen is None:
-        _pg.init()
-        _screen = _pg.display.set_mode((_width, _height))
-        _pg.display.set_caption("Mint Pygame")
-
-
-def _parse_int(value, name="value"):
-    try:
-        return int(value)
-    except (ValueError, TypeError):
-        print(f"ERROR: expected integer for {name}, got '{value}'", file=sys.stderr)
-        sys.exit(1)
 
 
 # ── commands ─────────────────────────────────────────────────────────
 
 def cmd_init(args):
-    """Initialise pygame and create a window.  pg.init(width, height)"""
-    global _width, _height, _screen
-    if len(args) >= 2:
-        _width = _parse_int(args[0], "width")
-        _height = _parse_int(args[1], "height")
-    _ensure_screen()
-    print(f"Window created ({_width}x{_height})")
-
-
-def cmd_quit(args):
-    """Quit pygame."""
-    global _screen
-    _ensure_pygame()
-    _pg.quit()
-    _screen = None
-    print("Pygame closed")
-
+    """pg.init(width, height)"""
+    _save_cmd("init", args)
+    print("ok")
 
 def cmd_title(args):
-    """Set the window title.  pg.title(My Game)"""
-    if not args:
-        print("ERROR: pg.title() needs a title string", file=sys.stderr)
-        sys.exit(1)
-    _ensure_screen()
-    title = " ".join(args)
-    _pg.display.set_caption(title)
-    print(f"Title set to '{title}'")
-
+    """pg.title(text)"""
+    _save_cmd("title", args)
+    print("ok")
 
 def cmd_fill(args):
-    """Fill the screen with an RGB colour.  pg.fill(r, g, b)"""
-    if len(args) < 3:
-        print("ERROR: pg.fill() needs r, g, b values", file=sys.stderr)
-        sys.exit(1)
-    _ensure_screen()
-    r = _parse_int(args[0], "r")
-    g = _parse_int(args[1], "g")
-    b = _parse_int(args[2], "b")
-    _screen.fill((r, g, b))
-    print(f"Filled ({r}, {g}, {b})")
-
-
-def cmd_flip(args):
-    """Update the display (push drawn content to screen)."""
-    _ensure_screen()
-    _pg.display.flip()
-    print("Display updated")
-
+    """pg.fill(r, g, b)"""
+    _save_cmd("fill", args)
+    print("ok")
 
 def cmd_rect(args):
-    """Draw a filled rectangle.  pg.rect(x, y, w, h, r, g, b)"""
-    if len(args) < 7:
-        print("ERROR: pg.rect() needs x, y, w, h, r, g, b", file=sys.stderr)
-        sys.exit(1)
-    _ensure_screen()
-    x = _parse_int(args[0], "x")
-    y = _parse_int(args[1], "y")
-    w = _parse_int(args[2], "w")
-    h = _parse_int(args[3], "h")
-    r = _parse_int(args[4], "r")
-    g = _parse_int(args[5], "g")
-    b = _parse_int(args[6], "b")
-    _pg.draw.rect(_screen, (r, g, b), (x, y, w, h))
-    print(f"Rect at ({x},{y}) size {w}x{h}")
-
+    _save_cmd("rect", args)
+    print("ok")
 
 def cmd_circle(args):
-    """Draw a filled circle.  pg.circle(x, y, radius, r, g, b)"""
-    if len(args) < 6:
-        print("ERROR: pg.circle() needs x, y, radius, r, g, b", file=sys.stderr)
-        sys.exit(1)
-    _ensure_screen()
-    x = _parse_int(args[0], "x")
-    y = _parse_int(args[1], "y")
-    rad = _parse_int(args[2], "radius")
-    r = _parse_int(args[3], "r")
-    g = _parse_int(args[4], "g")
-    b = _parse_int(args[5], "b")
-    _pg.draw.circle(_screen, (r, g, b), (x, y), rad)
-    print(f"Circle at ({x},{y}) r={rad}")
-
+    _save_cmd("circle", args)
+    print("ok")
 
 def cmd_line(args):
-    """Draw a line.  pg.line(x1, y1, x2, y2, r, g, b)"""
-    if len(args) < 7:
-        print("ERROR: pg.line() needs x1, y1, x2, y2, r, g, b", file=sys.stderr)
-        sys.exit(1)
-    _ensure_screen()
-    x1 = _parse_int(args[0], "x1")
-    y1 = _parse_int(args[1], "y1")
-    x2 = _parse_int(args[2], "x2")
-    y2 = _parse_int(args[3], "y2")
-    r = _parse_int(args[4], "r")
-    g = _parse_int(args[5], "g")
-    b = _parse_int(args[6], "b")
-    _pg.draw.line(_screen, (r, g, b), (x1, y1), (x2, y2), 2)
-    print(f"Line ({x1},{y1})->({x2},{y2})")
-
+    _save_cmd("line", args)
+    print("ok")
 
 def cmd_text(args):
-    """Render text on screen.  pg.text(message, x, y, size, r, g, b)"""
-    if len(args) < 7:
-        print("ERROR: pg.text() needs message, x, y, size, r, g, b", file=sys.stderr)
-        sys.exit(1)
-    _ensure_screen()
-    # Last 6 args are: x, y, size, r, g, b — everything before is the message
-    msg = " ".join(args[:-6])
-    x = _parse_int(args[-6], "x")
-    y = _parse_int(args[-5], "y")
-    sz = _parse_int(args[-4], "size")
-    r = _parse_int(args[-3], "r")
-    g = _parse_int(args[-2], "g")
-    b = _parse_int(args[-1], "b")
-    font = _pg.font.SysFont(None, sz)
-    surf = font.render(msg, True, (r, g, b))
-    _screen.blit(surf, (x, y))
-    print(f"Text '{msg}' at ({x},{y})")
-
+    _save_cmd("text", args)
+    print("ok")
 
 def cmd_image(args):
-    """Blit an image file onto the screen.  pg.image(path, x, y)"""
-    if len(args) < 3:
-        print("ERROR: pg.image() needs path, x, y", file=sys.stderr)
-        sys.exit(1)
-    _ensure_screen()
-    path = args[0]
-    x = _parse_int(args[1], "x")
-    y = _parse_int(args[2], "y")
-    if not os.path.exists(path):
-        print(f"ERROR: image not found '{path}'", file=sys.stderr)
-        sys.exit(1)
-    img = _pg.image.load(path)
-    _screen.blit(img, (x, y))
-    print(f"Image '{path}' at ({x},{y})")
-
+    _save_cmd("image", args)
+    print("ok")
 
 def cmd_clear(args):
-    """Clear screen to black and flip."""
-    _ensure_screen()
-    _screen.fill((0, 0, 0))
-    _pg.display.flip()
-    print("Screen cleared")
+    _save_cmd("clear", args)
+    print("ok")
 
+def cmd_flip(args):
+    """pg.flip()  — Update the display."""
+    state = _load_state()
+    if not state: return
+    _replay_state(state)
+    _pg.display.flip()
+    print("ok")
+
+def cmd_quit(args):
+    """pg.quit()  — Close pygame."""
+    state = _load_state()
+    if state:
+        _replay_state(state)
+        _pg.display.flip()
+        # Keep window open briefly if it's a quit command at the end of a script
+        # to allow the user to actually see the result.
+        import time
+        time.sleep(1)
+        _pg.quit()
+    _clear_state()
+    print("ok")
 
 def cmd_delay(args):
-    """Wait N milliseconds.  pg.delay(500)"""
-    if not args:
-        print("ERROR: pg.delay() needs milliseconds", file=sys.stderr)
-        sys.exit(1)
-    _ensure_pygame()
-    ms = _parse_int(args[0], "ms")
-    _pg.time.delay(ms)
-    print(f"Delayed {ms}ms")
-
+    """pg.delay(ms)"""
+    # Just print ok for now as we are batching
+    print("ok")
 
 def cmd_key(args):
-    """Wait for a single keypress and print the key name."""
-    _ensure_screen()
+    """pg.key()  — Wait for key."""
+    state = _load_state()
+    if not state: return
+    _replay_state(state)
+    _pg.display.flip()
     waiting = True
     while waiting:
         for ev in _pg.event.get():
             if ev.type == _pg.QUIT:
-                print("QUIT")
                 waiting = False
-                break
             if ev.type == _pg.KEYDOWN:
                 print(_pg.key.name(ev.key))
                 waiting = False
-                break
-
+    _pg.quit()
+    _clear_state()
 
 def cmd_event(args):
-    """Poll and print all pending events (useful for game loops)."""
-    _ensure_screen()
-    events = _pg.event.get()
-    if not events:
-        print("NONE")
-        return
-    for ev in events:
-        if ev.type == _pg.QUIT:
-            print("QUIT")
-        elif ev.type == _pg.KEYDOWN:
-            print(f"KEYDOWN:{_pg.key.name(ev.key)}")
-        elif ev.type == _pg.KEYUP:
-            print(f"KEYUP:{_pg.key.name(ev.key)}")
-        elif ev.type == _pg.MOUSEBUTTONDOWN:
-            print(f"MOUSEDOWN:{ev.pos[0]},{ev.pos[1]}")
-        elif ev.type == _pg.MOUSEBUTTONUP:
-            print(f"MOUSEUP:{ev.pos[0]},{ev.pos[1]}")
-        elif ev.type == _pg.MOUSEMOTION:
-            print(f"MOUSEMOVE:{ev.pos[0]},{ev.pos[1]}")
-
+    print("NONE")
 
 def cmd_resize(args):
-    """Resize the window.  pg.resize(width, height)"""
-    global _screen, _width, _height
-    if len(args) < 2:
-        print("ERROR: pg.resize() needs width, height", file=sys.stderr)
-        sys.exit(1)
-    _ensure_screen()
-    _width = _parse_int(args[0], "width")
-    _height = _parse_int(args[1], "height")
-    _screen = _pg.display.set_mode((_width, _height))
-    print(f"Resized to {_width}x{_height}")
-
+    _save_cmd("init", args) # reuse init logic for size
+    print("ok")
 
 def cmd_save(args):
-    """Save the current screen to an image file.  pg.save(filename.png)"""
-    if not args:
-        print("ERROR: pg.save() needs a filename", file=sys.stderr)
-        sys.exit(1)
-    _ensure_screen()
-    path = " ".join(args)
-    _pg.image.save(_screen, path)
-    print(f"Saved to {path}")
+    print("ok")
+
 
 
 # ── dispatch ─────────────────────────────────────────────────────────

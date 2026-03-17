@@ -1,8 +1,8 @@
 script      = plugins/gui/Plugin.py
 namespace   = gui
-description = GUI toolkit for Mint — windows, buttons, labels, inputs, and more
-author      = Fruzio
-version     = 1.0.0
+description = GUI toolkit for Mint like tkinter
+author      = Fruzion
+version     = 1.1.0
 cmd         = window
 cmd         = button
 cmd         = label
